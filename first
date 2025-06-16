@@ -1,0 +1,192 @@
+import React, { useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+const Home = () => {
+  const navigate = useNavigate();
+  return (
+    <div className="p-6 text-center">
+      <h1 className="text-4xl font-bold mb-4">Welcome to MyKhala</h1>
+      <p className="mb-6 max-w-xl mx-auto">
+        Connecting refugees to meaningful work while supporting the local community.
+      </p>
+      <Button onClick={() => navigate('/profiles')}>Browse Talent</Button>
+    </div>
+  );
+};
+
+const Industries = () => (
+  <div className="p-6">
+    <h2 className="text-2xl font-bold mb-4">Browse Industries</h2>
+    <Input placeholder="Search industries..." className="mb-4" />
+    <ul className="space-y-2">
+      <li>Cooking</li>
+      <li>Tailoring</li>
+      <li>Caregiving</li>
+      <li>Moving Assistance</li>
+    </ul>
+  </div>
+);
+
+const Profiles = () => {
+  const [profiles, setProfiles] = useState([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data, error } = await supabase
+        .from("refugee_profiles")
+        .select("name, location, description")
+        .eq("approved", true);
+
+      if (!error) setProfiles(data);
+    };
+    fetchProfiles();
+  }, []);
+
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-4">Available Refugee Talent</h2>
+      <div className="space-y-4">
+        {profiles.map((profile, idx) => (
+          <div key={idx} className="p-4 border rounded-xl shadow">
+            <p className="font-semibold">{profile.name} – {profile.location}</p>
+            <p>{profile.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const SubmitProfile = () => {
+  const [form, setForm] = useState({ name: "", age: "", location: "", description: "" });
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = async () => {
+    const { error } = await supabase.from("refugee_profiles").insert([{ ...form, approved: false }]);
+    if (!error) setSubmitted(true);
+  };
+
+  return (
+    <div className="p-6 max-w-md mx-auto">
+      <h2 className="text-2xl font-bold mb-4">Submit Your Profile</h2>
+      {submitted ? (
+        <p className="text-green-600">Your profile has been submitted for review.</p>
+      ) : (
+        <>
+          <Input name="name" placeholder="Name" className="mb-2" onChange={handleChange} />
+          <Input name="age" placeholder="Age" className="mb-2" onChange={handleChange} />
+          <Input name="location" placeholder="Location / Area" className="mb-2" onChange={handleChange} />
+          <textarea
+            name="description"
+            placeholder="Describe your skills/services"
+            className="w-full p-2 border rounded mb-4"
+            rows={4}
+            onChange={handleChange}
+          ></textarea>
+          <Button onClick={handleSubmit}>Submit for Review</Button>
+        </>
+      )}
+    </div>
+  );
+};
+
+const AdminDashboard = () => {
+  const [pending, setPending] = useState([]);
+  const [auth, setAuth] = useState(false);
+  const [password, setPassword] = useState("");
+
+  const fetchPending = async () => {
+    const { data } = await supabase
+      .from("refugee_profiles")
+      .select("id, name, location, description")
+      .eq("approved", false);
+    setPending(data);
+  };
+
+  const approveProfile = async (id) => {
+    await supabase.from("refugee_profiles").update({ approved: true }).eq("id", id);
+    setPending((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const rejectProfile = async (id) => {
+    await supabase.from("refugee_profiles").delete().eq("id", id);
+    setPending((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleLogin = () => {
+    if (password === "admin123") {
+      setAuth(true);
+      fetchPending();
+    } else {
+      alert("Incorrect password");
+    }
+  };
+
+  if (!auth) {
+    return (
+      <div className="p-6 max-w-sm mx-auto text-center">
+        <h2 className="text-xl font-bold mb-4">Admin Login</h2>
+        <Input
+          type="password"
+          placeholder="Enter admin password"
+          className="mb-4"
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <Button onClick={handleLogin}>Login</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-4">Pending Profiles</h2>
+      {pending.length === 0 ? <p>No pending profiles.</p> : (
+        <div className="space-y-4">
+          {pending.map((p) => (
+            <div key={p.id} className="p-4 border rounded-xl shadow">
+              <p className="font-semibold">{p.name} – {p.location}</p>
+              <p>{p.description}</p>
+              <div className="flex gap-2 mt-2">
+                <Button onClick={() => approveProfile(p.id)}>Approve</Button>
+                <Button variant="outline" onClick={() => rejectProfile(p.id)}>Reject</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Login = () => (
+  <div className="p-6 max-w-md mx-auto text-center space-y-4">
+    <h2 className="text-2xl font-bold">Login</h2>
+    <Button className="w-full">Employer Login</Button>
+    <Button className="w-full">Refugee Login</Button>
+  </div>
+);
+
+const App = () => (
+  <Router>
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/industries" element={<Industries />} />
+      <Route path="/profiles" element={<Profiles />} />
+      <Route path="/submit-profile" element={<SubmitProfile />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/admin" element={<AdminDashboard />} />
+    </Routes>
+  </Router>
+);
+
+export default App;
